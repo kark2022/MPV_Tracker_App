@@ -307,11 +307,15 @@ class FclmClient:
         try:
             url = f"{FCLM_BASE_URL}/employee/timeDetails?warehouseId={self.warehouse_id}"
             html = self._request(url)
-            if "ganttChart" in html or "Time Details" in html or "employee" in html.lower():
-                return True, "Connected to FCLM successfully."
-            if "login" in html.lower() or "midway" in html.lower() or "Sign In" in html:
+            lower = html.lower()
+            # Check for login/auth redirect FIRST (login pages can contain "employee")
+            if "midway" in lower or "sign in" in lower or ("/login" in lower and "ganttChart" not in html):
                 return False, "Cookie expired or invalid - FCLM is asking to log in."
-            return True, "Connected (response received)."
+            if "ganttChart" in html or "Time Details" in html:
+                return True, "Connected to FCLM successfully."
+            # Show a snippet of what we got back for debugging
+            snippet = html[:300].strip()
+            return False, f"Unexpected response (cookie may be wrong format).\n\nFirst 300 chars:\n{snippet}"
         except Exception as e:
             return False, f"Connection failed: {e}"
 
