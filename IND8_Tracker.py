@@ -253,9 +253,14 @@ class FclmClient:
     """Client for fetching employee data from FCLM Portal."""
 
     def __init__(self, cookie="", warehouse_id="IND8"):
-        self.cookie = cookie
+        self.cookie = self._sanitize_cookie(cookie)
         self.warehouse_id = warehouse_id
         self._ssl_ctx = ssl.create_default_context()
+
+    @staticmethod
+    def _sanitize_cookie(cookie):
+        """Strip non-ASCII chars (e.g. ellipsis from browser truncation)."""
+        return "".join(c for c in cookie if ord(c) < 128)
 
     def is_connected(self):
         return bool(self.cookie.strip())
