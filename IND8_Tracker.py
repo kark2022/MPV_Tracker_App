@@ -1493,6 +1493,11 @@ class App:
         total_indirect_mins = 0.0
         restricted_paths_worked = set()
 
+        # Consolidate sessions by classified path so segmented gantt
+        # entries (e.g. 9 segments of "Liquidations Pick") become one row.
+        consolidated = {}  # key -> {work_type, area, role, label, mins, first_start, last_end}
+        display_order = []
+
         for s in data["sessions"]:
             title = s["title"]
             dur_mins = s.get("duration_minutes", 0)
@@ -1507,25 +1512,52 @@ class App:
                 area = mapping["area"] if mapping else "CRET"
                 role = mapping["role"] if mapping else "Water Spider"
                 total_indirect_mins += dur_mins
+                group_key = rp  # Group all segments of same restricted path
+                label = role
             elif mapping:
                 work_type = mapping["type"]
                 area = mapping["area"]
                 role = mapping["role"]
                 if work_type == "INDIRECT":
                     total_indirect_mins += dur_mins
+                group_key = title  # Group by exact title for mapped paths
+                label = role if work_type == "INDIRECT" else title[:20]
             else:
                 work_type = "DIRECT"
                 area = "--"
                 role = "--"
+                group_key = title  # Group by exact title for direct work
+                label = title[:20]
 
-            dur_h = dur_mins / 60.0
+            if group_key in consolidated:
+                entry = consolidated[group_key]
+                entry["mins"] += dur_mins
+                # Track the last end time (empty = still active)
+                s_end = s.get("end", "") or ""
+                if not s_end:
+                    entry["last_end"] = ""  # ACTIVE
+                elif entry["last_end"] != "":
+                    entry["last_end"] = s_end
+            else:
+                consolidated[group_key] = {
+                    "work_type": work_type,
+                    "area": area,
+                    "label": label,
+                    "mins": dur_mins,
+                    "first_start": s.get("start", "--"),
+                    "last_end": s.get("end", "--") or "",
+                }
+                display_order.append(group_key)
 
+        for key in display_order:
+            entry = consolidated[key]
+            dur_h = entry["mins"] / 60.0
             self.tree.insert("", "end", values=(
-                s.get("start", "--"),
-                s.get("end", "--") or "ACTIVE",
-                work_type,
-                area,
-                role if work_type == "INDIRECT" else title[:20],
+                entry["first_start"],
+                entry["last_end"] or "ACTIVE",
+                entry["work_type"],
+                entry["area"],
+                entry["label"],
                 f"{dur_h:.2f}",
             ))
 
